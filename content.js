@@ -1,7 +1,6 @@
 (async function main() {
   const cfg = await chrome.storage.sync.get({
     minHoursPerDay: 8,             // минимум часов
-    excludeToday: false,           // проверять сегодняшнюю дату
     highlight: true                // подсветить проблемные ячейки на странице
   });
 
@@ -79,29 +78,25 @@ function checkTable(table, cfg) {
   perDayCells.forEach((td, i) => {
     const ymd = theadDates[i];
     const d = parseYMD(ymd);
-    const skipToday = cfg.excludeToday && sameDay(d, today);
-    const isOutdate = d < today && !skipToday;
-
-    if (isOutdate || !isWeekday(d)) return;
+    const isToday = sameDay(d, today);
+    if (d > today) return;
+    if (!isWeekday(d)) return;
 
     const txt = (td.textContent || "").replace(/\s+/g, "").replace(",", ".").trim(); // например "8.00"
-    const hours = txt ? parseFloat(txt) : 0;
+    const parsed = txt ? parseFloat(txt) : 0;
+    const hours = isFinite(parsed) ? parsed : 0;
+    const ok = hours >= cfg.minHoursPerDay; // допускаем >= 8.00
 
-    if (sameDay(d, today)) {
+    if (isToday) {
       todayFound = true;
-      todayHours = isFinite(hours) ? hours : 0;
+      todayHours = hours;
+    } else if (!ok) {
+      missingDays.push({ date: ymd, hours });
     }
 
-    const ok = hours >= cfg.minHoursPerDay; // допускаем >= 8.00
-    if (!ok) {
-      missingDays.push({ date: ymd, hours: isFinite(hours) ? hours : 0 });
-      if (cfg.highlight) {
-        td.style.outline = "2px solid #d32f2f";
-        td.title = `Недобор: ${isFinite(hours) ? hours.toFixed(2) : "0"} ч`;
-      }
-    } else if (cfg.highlight) {
-      td.style.outline = "2px solid #2e7d32";
-      td.title = `OK: ${hours.toFixed(2)} ч`;
+    if (cfg.highlight) {
+      td.style.outline = `2px solid ${ok ? "#2e7d32" : "#d32f2f"}`;
+      td.title = `${ok ? "OK" : "Недобор"}: ${hours.toFixed(2)} ч`;
     }
   });
 
