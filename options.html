@@ -11,6 +11,8 @@
     button { padding:8px 12px; margin-right:8px; }
     small { color:#666; }
     code { background:#f3f3f3; padding:1px 4px; }
+    .weekdays { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
+    .weekdays label { display:flex; align-items:center; gap:4px; font-weight:400; margin:0; }
   </style>
 </head>
 <body>
@@ -27,9 +29,32 @@
       <label><input id="highlight" type="checkbox" /> Подсвечивать ячейки на странице</label>
     </div>
     <div>
-      <label>Время проверок (локальное), через запятую</label>
-      <input id="times" type="text" />
-      <small>Формат: <code>08:00,17:00,18:00,19:00</code>. Изменение перезапускает ежедневные задачи.</small>
+      <label>Рабочие часы</label>
+      <div class="row">
+        <div>
+          <label for="workStart">Начало</label>
+          <input id="workStart" type="time" />
+        </div>
+        <div>
+          <label for="workEnd">Конец</label>
+          <input id="workEnd" type="time" />
+        </div>
+      </div>
+      <label for="lunchStart">Начало обеда</label>
+      <input id="lunchStart" type="time" />
+      <label for="lunchDurationMinutes">Длительность обеда (минут)</label>
+      <input id="lunchDurationMinutes" type="number" step="5" min="0" />
+      <label>Рабочие дни</label>
+      <div class="weekdays">
+        <label><input type="checkbox" name="workingDays" value="1" /> Пн</label>
+        <label><input type="checkbox" name="workingDays" value="2" /> Вт</label>
+        <label><input type="checkbox" name="workingDays" value="3" /> Ср</label>
+        <label><input type="checkbox" name="workingDays" value="4" /> Чт</label>
+        <label><input type="checkbox" name="workingDays" value="5" /> Пт</label>
+        <label><input type="checkbox" name="workingDays" value="6" /> Сб</label>
+        <label><input type="checkbox" name="workingDays" value="0" /> Вс</label>
+      </div>
+      <small>Скрипт запускается каждый час только в отмеченные рабочие дни и вне обеденного перерыва.</small>
     </div>
   </div>
 

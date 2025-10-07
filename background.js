@@ -1,7 +1,14 @@
 const DEFAULT_REPORT_URL =
   "https://max.rm.mosreg.ru/time_entries/report?utf8=%E2%9C%93&criteria%5B%5D=user&columns=day&criteria%5B%5D=&set_filter=1&type=TimeEntryQuery&f%5B%5D=spent_on&op%5Bspent_on%5D=%3E%3Ct-&v%5Bspent_on%5D%5B%5D=14&f%5B%5D=user_id&op%5Buser_id%5D=%3D&v%5Buser_id%5D%5B%5D=me&query%5Bsort_criteria%5D%5B0%5D%5B%5D=spent_on&query%5Bsort_criteria%5D%5B0%5D%5B%5D=desc&query%5Bgroup_by%5D=spent_on&t%5B%5D=hours&c%5B%5D=project&c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&saved_query_id=0";
 
-const DEFAULT_TIMES = ["08:00", "09:00", "10:00", "17:00", "18:00", "19:00"];
+const DEFAULT_SETTINGS = {
+  reportUrl: DEFAULT_REPORT_URL,
+  workStart: "09:00",
+  workEnd: "18:00",
+  lunchStart: "13:00",
+  lunchDurationMinutes: 60,
+  workingDays: [1, 2, 3, 4, 5]
+};
 
 chrome.runtime.onInstalled.addListener(() => initSchedules());
 chrome.runtime.onStartup.addListener(() => initSchedules());
@@ -12,35 +19,6 @@ chrome.action.onClicked.addListener(() => triggerCheck("manual"));
 chrome.alarms.onAlarm.addListener(alarm => {
   if (!alarm.name.startsWith("rm8h:")) return;
   triggerCheck("scheduled");
-});
-
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (msg?.type === "RM8H_RESULT") {
-    const { missingDays, checkedAt, url, error } = msg.payload || {};
-    // Показ уведомления только при проблеме или ошибке
-    if (error) {
-      notify("Не удалось проверить отчёт", error);
-    } else if (Array.isArray(missingDays) && missingDays.length > 0) {
-      const lines = missingDays
-        .map(d => `${d.date}: ${d.hours.toFixed(2)} ч`)
-        .join("\n");
-      notify("Недобор часов по будням", lines);
-      chrome.action.setBadgeText({ text: "!" });
-      chrome.action.setBadgeBackgroundColor({ color: "#d00" });
-    } else {
-      // Всё ок — очищаем бейдж
-      chrome.action.setBadgeText({ text: "" });
-    }
-    // Закрываем технический таб, если он наш
-    if (sender?.tab?.id && sender.tab.pendingUrl?.startsWith("https://max.rm.mosreg.ru")
-        || sender.tab.url?.startsWith("https://max.rm.mosreg.ru")) {
-      // Закрываем только если таб не активный, чтобы не мешать пользователю
-      chrome.tabs.get(sender.tab.id, t => {
-        if (chrome.runtime.lastError) return;
-        if (!t.active) chrome.tabs.remove(sender.tab.id);
-      });
-    }
-  }
 });
 
 function notify(title, message) {
@@ -54,16 +32,13 @@ function notify(title, message) {
 }
 
 async function initSchedules() {
-  const { times, reportUrl } = await chrome.storage.sync.get({
-    times: DEFAULT_TIMES,
-    reportUrl: DEFAULT_REPORT_URL
-  });
+  const settings = await getSettings();
 
   // Сначала очищаем старые алармы
   const alarms = await chrome.alarms.getAll();
   await Promise.all(alarms.filter(a => a.name.startsWith("rm8h:")).map(a => chrome.alarms.clear(a.name)));
 
-  // Создаём ежедневные алармы
+  const times = buildCheckTimes(settings);
   times.forEach(t => scheduleDailyAlarm(`rm8h:${t}`, t));
 }
 
@@ -80,8 +55,155 @@ function scheduleDailyAlarm(name, hhmm) {
 }
 
 async function triggerCheck(source) {
-  const { reportUrl } = await chrome.storage.sync.get({ reportUrl: DEFAULT_REPORT_URL });
-  // Открываем в фоне; контент-скрипт сам проверит и пришлёт результат
+  const settings = await getSettings();
+  const now = new Date();
+
+  if (source !== "manual") {
+    if (!isWorkingDay(now, settings.workingDays)) return;
+    if (!isWithinWorkingWindow(now, settings)) return;
+  }
+
+  const reportUrl = settings.reportUrl || DEFAULT_REPORT_URL;
   chrome.tabs.create({ url: reportUrl, active: false });
+}
+
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (msg?.type === "RM8H_RESULT") {
+    handleResultMessage(msg.payload || {}, sender);
+  } else if (msg?.type === "RM8H_RESCHEDULE") {
+    initSchedules();
+  }
+});
+
+async function handleResultMessage(payload, sender) {
+  const settings = await getSettings();
+
+  if (payload.error) {
+    notify("Не удалось проверить отчёт", payload.error);
+    closeTechnicalTab(sender);
+    return;
+  }
+
+  const missingDays = Array.isArray(payload.missingDays) ? payload.missingDays : [];
+  if (missingDays.length > 0) {
+    const lines = missingDays
+      .map(d => `${d.date}: ${d.hours.toFixed(2)} ч`)
+      .join("\n");
+    notify("Недобор часов по будням", lines);
+  }
+
+  const checkedAt = payload.checkedAt ? new Date(payload.checkedAt) : new Date();
+  const isWorkDay = isWorkingDay(checkedAt, settings.workingDays);
+  const expectedHours = isWorkDay ? calculateExpectedHours(checkedAt, settings) : 0;
+  const loggedHours = typeof payload.hoursToday === "number" && isFinite(payload.hoursToday)
+    ? payload.hoursToday
+    : 0;
+  const deficit = Math.max(0, expectedHours - loggedHours);
+  const badgeValue = Math.max(0, Math.ceil(deficit - 1e-9));
+
+  if (badgeValue > 0) {
+    chrome.action.setBadgeBackgroundColor({ color: "#d00" });
+    chrome.action.setBadgeText({ text: String(badgeValue) });
+  } else {
+    chrome.action.setBadgeText({ text: "" });
+  }
+
+  closeTechnicalTab(sender);
+}
+
+async function getSettings() {
+  const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const workingDays = Array.isArray(stored.workingDays) && stored.workingDays.length
+    ? stored.workingDays.map(Number)
+    : DEFAULT_SETTINGS.workingDays;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    workingDays
+  };
+}
+
+function isWorkingDay(date, workingDays) {
+  const day = date.getDay();
+  return workingDays.includes(day);
+}
+
+function isWithinWorkingWindow(date, settings) {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const start = parseTime(settings.workStart);
+  const end = parseTime(settings.workEnd);
+  if (start == null || end == null) return true;
+  if (minutes < start || minutes > end) return false;
+
+  const lunchStart = parseTime(settings.lunchStart);
+  const lunchEnd = lunchStart != null
+    ? lunchStart + (Number(settings.lunchDurationMinutes) || 0)
+    : null;
+
+  if (lunchStart != null && lunchEnd != null && minutes >= lunchStart && minutes < lunchEnd) {
+    return false;
+  }
+  return true;
+}
+
+function calculateExpectedHours(date, settings) {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const slots = buildWorkingHourSlots(settings);
+  if (!slots.length) return 0;
+  const completed = slots.filter(min => minutes >= min).length;
+  return Math.min(completed, slots.length);
+}
+
+function buildWorkingHourSlots(settings) {
+  const start = parseTime(settings.workStart);
+  const end = parseTime(settings.workEnd);
+  if (start == null || end == null || end <= start) return [];
+
+  const lunchStart = parseTime(settings.lunchStart);
+  const lunchDuration = Number(settings.lunchDurationMinutes) || 0;
+  const lunchEnd = lunchStart != null ? lunchStart + lunchDuration : null;
+
+  const slots = [];
+  for (let t = start; t < end; t += 60) {
+    if (lunchStart != null && lunchEnd != null && t >= lunchStart && t < lunchEnd) continue;
+    slots.push(t);
+  }
+  return slots;
+}
+
+function buildCheckTimes(settings) {
+  const slots = buildWorkingHourSlots(settings);
+  const times = slots.map(minutesToTime);
+  const end = parseTime(settings.workEnd);
+  const start = parseTime(settings.workStart);
+  if (end != null && start != null && end > start) {
+    const endStr = minutesToTime(end);
+    if (!times.includes(endStr)) times.push(endStr);
+  }
+  return times;
+}
+
+function parseTime(str) {
+  if (typeof str !== "string") return null;
+  const match = str.trim().match(/^([0-1]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function minutesToTime(min) {
+  const hh = String(Math.floor(min / 60)).padStart(2, "0");
+  const mm = String(min % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function closeTechnicalTab(sender) {
+  if (!sender?.tab?.id) return;
+  const tabUrl = sender.tab.pendingUrl || sender.tab.url || "";
+  if (!tabUrl.startsWith("https://max.rm.mosreg.ru")) return;
+
+  chrome.tabs.get(sender.tab.id, t => {
+    if (chrome.runtime.lastError) return;
+    if (!t.active) chrome.tabs.remove(sender.tab.id);
+  });
 }
 
