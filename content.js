@@ -74,6 +74,8 @@ function checkTable(table, cfg) {
   today.setHours(0,0,0,0);
 
   const missingDays = [];
+  let todayFound = false;
+  let todayHours = 0;
   perDayCells.forEach((td, i) => {
     const ymd = theadDates[i];
     const d = parseYMD(ymd);
@@ -84,6 +86,11 @@ function checkTable(table, cfg) {
 
     const txt = (td.textContent || "").replace(/\s+/g, "").replace(",", ".").trim(); // например "8.00"
     const hours = txt ? parseFloat(txt) : 0;
+
+    if (sameDay(d, today)) {
+      todayFound = true;
+      todayHours = isFinite(hours) ? hours : 0;
+    }
 
     const ok = hours >= cfg.minHoursPerDay; // допускаем >= 8.00
     if (!ok) {
@@ -98,6 +105,6 @@ function checkTable(table, cfg) {
     }
   });
 
-  return { missingDays };
+  return { missingDays, hoursToday: todayFound ? todayHours : 0, todayFound };
 }
 
