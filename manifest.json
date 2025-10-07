@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Redmine 8h Watcher",
+  "version": "0.1.0",
+  "description": "Проверяет, что за каждый прошедший будний день залогировано >= 8 часов, и напоминает, если нет.",
+  "permissions": ["alarms", "notifications", "storage", "tabs"],
+  "host_permissions": [
+    "https://max.rm.mosreg.ru/time_entries/report*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": { "default_title": "Проверить 8 часов сейчас" },
+  "icons": { "128": "icon128.png" },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://max.rm.mosreg.ru/time_entries/report*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
+

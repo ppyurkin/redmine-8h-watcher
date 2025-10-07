@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Redmine 8h Watcher — настройки</title>
+  <style>
+    body { font: 14px/1.45 system-ui, sans-serif; max-width: 880px; margin: 24px auto; }
+    label { display:block; margin: 8px 0 4px; font-weight: 600; }
+    input[type="text"], input[type="number"], textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    button { padding:8px 12px; margin-right:8px; }
+    small { color:#666; }
+    code { background:#f3f3f3; padding:1px 4px; }
+  </style>
+</head>
+<body>
+  <h1>Настройки</h1>
+
+  <label>URL отчёта</label>
+  <input id="reportUrl" type="text" />
+
+  <div class="row">
+    <div>
+      <label>Минимум часов в день</label>
+      <input id="minHoursPerDay" type="number" step="0.25" min="0" />
+      <label><input id="excludeToday" type="checkbox" /> Не проверять сегодняшний день</label>
+      <label><input id="highlight" type="checkbox" /> Подсвечивать ячейки на странице</label>
+    </div>
+    <div>
+      <label>Время проверок (локальное), через запятую</label>
+      <input id="times" type="text" />
+      <small>Формат: <code>08:00,17:00,18:00,19:00</code>. Изменение перезапускает ежедневные задачи.</small>
+    </div>
+  </div>
+
+  <p>
+    <button id="save">Сохранить</button>
+    <button id="reset">Сбросить к значениям по умолчанию</button>
+  </p>
+
+  <script src="options.js"></script>
+</body>
+</html>
+
