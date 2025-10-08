@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS = {
   workingDays: [1, 2, 3, 4, 5]
 };
 
+const pendingReportTabs = new Set();
+
 chrome.runtime.onInstalled.addListener(() => initSchedules());
 chrome.runtime.onStartup.addListener(() => initSchedules());
 
@@ -64,7 +66,10 @@ async function triggerCheck(source) {
   }
 
   const reportUrl = settings.reportUrl || DEFAULT_REPORT_URL;
-  chrome.tabs.create({ url: reportUrl, active: false });
+  chrome.tabs.create({ url: reportUrl, active: false }, tab => {
+    if (chrome.runtime.lastError) return;
+    if (tab?.id != null) pendingReportTabs.add(tab.id);
+  });
 }
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
@@ -75,7 +80,24 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
+chrome.webNavigation.onErrorOccurred.addListener(details => {
+  if (details.frameId !== 0) return;
+  if (!pendingReportTabs.has(details.tabId)) return;
+  if (!details.url.startsWith("https://max.rm.mosreg.ru")) return;
+
+  pendingReportTabs.delete(details.tabId);
+  handleResultMessage({ error: `Сетевая ошибка: ${details.error}` }, { tab: { id: details.tabId, url: details.url } });
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  pendingReportTabs.delete(tabId);
+});
+
 async function handleResultMessage(payload, sender) {
+  if (sender?.tab?.id != null) {
+    pendingReportTabs.delete(sender.tab.id);
+  }
+
   const settings = await getSettings();
 
   const hasError = Boolean(payload?.error);
