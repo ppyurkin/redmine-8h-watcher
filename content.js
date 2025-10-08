@@ -5,7 +5,7 @@
   });
 
   try {
-    const table = await waitForTable("#time-report", 20000); // до 20 секунд
+    const table = await waitForTable("#time-report", 10000); // до 10 секунд
     const result = checkTable(table, cfg);
     chrome.runtime.sendMessage({ type: "RM8H_RESULT", payload: { ...result, url: location.href, checkedAt: new Date().toISOString() } });
   } catch (e) {
