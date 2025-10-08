@@ -78,13 +78,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
 async function handleResultMessage(payload, sender) {
   const settings = await getSettings();
 
-  if (payload.error) {
+  const hasError = Boolean(payload?.error);
+  if (hasError) {
     notify("Не удалось проверить отчёт", payload.error);
-    closeTechnicalTab(sender);
-    return;
   }
 
-  const missingDays = Array.isArray(payload.missingDays) ? payload.missingDays : [];
+  const missingDays = !hasError && Array.isArray(payload.missingDays) ? payload.missingDays : [];
   if (missingDays.length > 0) {
     const lines = missingDays
       .map(d => `${d.date}: ${d.hours.toFixed(2)} ч`)
@@ -95,7 +94,7 @@ async function handleResultMessage(payload, sender) {
   const checkedAt = payload.checkedAt ? new Date(payload.checkedAt) : new Date();
   const isWorkDay = isWorkingDay(checkedAt, settings.workingDays);
   const expectedHours = isWorkDay ? calculateExpectedHours(checkedAt, settings) : 0;
-  const loggedHours = typeof payload.hoursToday === "number" && isFinite(payload.hoursToday)
+  const loggedHours = !hasError && typeof payload.hoursToday === "number" && isFinite(payload.hoursToday)
     ? payload.hoursToday
     : 0;
   const deficit = Math.max(0, expectedHours - loggedHours);
