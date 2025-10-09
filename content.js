@@ -9,7 +9,18 @@
     const result = checkTable(table, cfg);
     chrome.runtime.sendMessage({ type: "RM8H_RESULT", payload: { ...result, url: location.href, checkedAt: new Date().toISOString() } });
   } catch (e) {
-    chrome.runtime.sendMessage({ type: "RM8H_RESULT", payload: { error: String(e && e.message || e) } });
+    const message = e && e.message ? e.message : String(e);
+    chrome.runtime.sendMessage({
+      type: "RM8H_RESULT",
+      payload: {
+        missingDays: [],
+        hoursToday: 0,
+        todayFound: false,
+        error: message,
+        url: location.href,
+        checkedAt: new Date().toISOString()
+      }
+    });
   }
 })();
 
