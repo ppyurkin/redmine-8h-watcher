@@ -1,3 +1,4 @@
+// Значения по умолчанию для всех пользовательских настроек
 const DEFAULTS = {
   reportUrl: "https://max.rm.mosreg.ru/time_entries/report?utf8=%E2%9C%93&criteria%5B%5D=user&columns=day&criteria%5B%5D=&set_filter=1&type=TimeEntryQuery&f%5B%5D=spent_on&op%5Bspent_on%5D=%3E%3Ct-&v%5Bspent_on%5D%5B%5D=14&f%5B%5D=user_id&op%5Buser_id%5D=%3D&v%5Buser_id%5D%5B%5D=me&query%5Bsort_criteria%5D%5B0%5D%5B%5D=spent_on&query%5Bsort_criteria%5D%5B0%5D%5B%5D=desc&query%5Bgroup_by%5D=spent_on&t%5B%5D=hours&c%5B%5D=project&c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&saved_query_id=0",
   minHoursPerDay: 8,
@@ -9,6 +10,7 @@ const DEFAULTS = {
   workingDays: [1, 2, 3, 4, 5]
 };
 
+// Кэшируем ссылки на элементы формы настроек
 const els = {
   reportUrl: document.getElementById("reportUrl"),
   minHoursPerDay: document.getElementById("minHoursPerDay"),
@@ -23,6 +25,7 @@ const els = {
 };
 
 async function load() {
+  // Загружаем сохранённые настройки и отображаем их в форме
   const cfg = await chrome.storage.sync.get(DEFAULTS);
   els.reportUrl.value = cfg.reportUrl;
   els.minHoursPerDay.value = cfg.minHoursPerDay;
@@ -39,10 +42,13 @@ async function load() {
   });
 }
 async function save() {
+  // Собираем выбранные пользователем дни недели
   const workingDays = els.workingDays.filter(cb => cb.checked).map(cb => Number(cb.value));
   const sanitizeTime = (value, fallback) => {
+    // Проверяем формат времени HH:MM, иначе возвращаем значение по умолчанию
     return value && /^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(value) ? value : fallback;
   };
+  // Сохраняем настройки в синхронизированное хранилище
   await chrome.storage.sync.set({
     reportUrl: els.reportUrl.value.trim(),
     minHoursPerDay: Number(els.minHoursPerDay.value),
@@ -61,12 +67,15 @@ async function save() {
   chrome.runtime.reload();
 }
 
+// Обработчики кнопок «Сохранить» и «Сбросить»
 els.save.addEventListener("click", save);
 els.reset.addEventListener("click", async () => {
+  // Возвращаем стандартные значения и перезапускаем сервис-воркер
   await chrome.storage.sync.set(DEFAULTS);
   await load();
   chrome.runtime.reload();
 });
 
+// При открытии страницы сразу заполняем форму сохранёнными настройками
 load();
 
