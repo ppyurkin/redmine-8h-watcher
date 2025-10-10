@@ -124,9 +124,65 @@ async function triggerCheck(source) {
   }
 
   const reportUrl = settings.reportUrl || DEFAULT_REPORT_URL;
+  log("Checking report availability", reportUrl);
+  const availability = await checkReportAvailability(reportUrl);
+  log("Report availability result", availability);
+
+  if (!availability.ok) {
+    const message = availability.message || "Redmine недоступен";
+    log("Report unavailable – aborting tab creation", message);
+    notify("Не удалось открыть отчёт", message);
+    return;
+  }
+
   log("Opening report tab", reportUrl);
   // Открываем вкладку с отчётом в фоне — контент-скрипт продолжит работу
   chrome.tabs.create({ url: reportUrl, active: false });
+}
+
+async function checkReportAvailability(url) {
+  log("Performing availability check", url);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      credentials: "include",
+      redirect: "manual",
+      cache: "no-store"
+    });
+    const status = response.status;
+    const redirected = response.type === "opaqueredirect" || (status >= 300 && status < 400);
+    log("Availability response", {
+      status,
+      redirected,
+      type: response.type,
+      redirectedFlag: response.redirected
+    });
+
+    if (redirected) {
+      return {
+        ok: false,
+        reason: "redirect",
+        message: "Redmine перенаправил запрос — требуется авторизация"
+      };
+    }
+
+    if (response.ok) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      reason: `status_${status}`,
+      message: status === 0 ? "Redmine недоступен" : `Redmine ответил со статусом ${status}`
+    };
+  } catch (error) {
+    log("Error while checking report availability", error);
+    return {
+      ok: false,
+      reason: "network_error",
+      message: "Не удалось подключиться к Redmine"
+    };
+  }
 }
 
 chrome.runtime.onMessage.addListener((msg, sender) => {
