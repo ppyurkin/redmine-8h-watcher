@@ -130,8 +130,13 @@ async function triggerCheck(source) {
 
   if (!availability.ok) {
     const message = availability.message || "Redmine недоступен";
-    log("Report unavailable – aborting tab creation", message);
-    notify("Не удалось открыть отчёт", message);
+    log("Report unavailable – applying default day state", message);
+    await applyDefaultDayState({
+      errorMessage: message,
+      errorTitle: "Не удалось открыть отчёт",
+      checkedAt: new Date(),
+      url: reportUrl
+    });
     return;
   }
 
@@ -207,8 +212,9 @@ async function handleResultMessage(payload, sender) {
   log("Result contains error?", hasError);
   if (hasError) {
     // Если контент-скрипт сообщил об ошибке, показываем уведомление
-    log("Sending error notification", payload.error);
-    notify("Не удалось проверить отчёт", payload.error);
+    const errorTitle = payload.errorTitle || "Не удалось проверить отчёт";
+    log("Sending error notification", { message: payload.error, title: errorTitle });
+    notify(errorTitle, payload.error);
   }
 
   const missingDays = !hasError && Array.isArray(payload.missingDays) ? payload.missingDays : [];
@@ -251,6 +257,20 @@ async function handleResultMessage(payload, sender) {
 
   // Закрываем техническую вкладку, если она не нужна пользователю
   closeTechnicalTab(sender);
+}
+
+function applyDefaultDayState({ errorMessage, errorTitle, checkedAt = new Date(), url } = {}) {
+  log("Applying default day state", { errorMessage, errorTitle, checkedAt, url });
+  const payload = {
+    missingDays: [],
+    hoursToday: 0,
+    todayFound: false,
+    error: errorMessage,
+    errorTitle,
+    checkedAt: checkedAt instanceof Date ? checkedAt.toISOString() : checkedAt,
+    url
+  };
+  return handleResultMessage(payload, null);
 }
 
 async function getSettings() {
