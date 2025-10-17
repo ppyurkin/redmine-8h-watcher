@@ -34,9 +34,6 @@ log("Content script injected", { url: location.href, injectedAt: new Date().toIS
     chrome.runtime.sendMessage({
       type: "RM8H_RESULT",
       payload: {
-        missingDays: [],
-        hoursToday: 0,
-        todayFound: false,
         error: message,
         url: location.href,
         checkedAt: new Date().toISOString()
