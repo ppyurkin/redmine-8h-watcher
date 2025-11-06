@@ -13,6 +13,9 @@
     code { background:#f3f3f3; padding:1px 4px; }
     .weekdays { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
     .weekdays label { display:flex; align-items:center; gap:4px; font-weight:400; margin:0; }
+    .excluded-range { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; margin:4px 0; background:#f5f5f5; border-radius:4px; }
+    .excluded-range button { padding:4px 8px; background:#d32f2f; color:white; border:none; border-radius:3px; cursor:pointer; }
+    .excluded-range button:hover { background:#b71c1c; }
   </style>
 </head>
 <body>
@@ -56,6 +59,25 @@
       <small>Скрипт запускается каждый час только в отмеченные рабочие дни и вне обеденного перерыва.</small>
     </div>
   </div>
+
+  <h2>Исключаемые даты</h2>
+  <p><small>Укажите диапазоны дат, которые не должны проверяться (отпуск, больничный, отгулы, дополнительные выходные).</small></p>
+
+  <div id="excludedRangesList"></div>
+
+  <div class="row" style="margin-top: 16px;">
+    <div>
+      <label for="excludeFrom">Дата начала</label>
+      <input id="excludeFrom" type="date" />
+    </div>
+    <div>
+      <label for="excludeTo">Дата окончания</label>
+      <input id="excludeTo" type="date" />
+    </div>
+  </div>
+  <p>
+    <button id="addExcludedRange">Добавить диапазон</button>
+  </p>
 
   <p>
     <button id="save">Сохранить</button>
