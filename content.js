@@ -9,7 +9,8 @@ log("Content script injected", { url: location.href, injectedAt: new Date().toIS
   // Считываем настройки подсчёта часов из синхронизированного хранилища
   const cfg = await chrome.storage.sync.get({
     minHoursPerDay: 8,             // минимум часов
-    highlight: true                // подсветить проблемные ячейки на странице
+    highlight: true,               // подсветить проблемные ячейки на странице
+    excludedDateRanges: []         // диапазоны исключаемых дат
   });
   log("Fetched content settings", cfg);
 
@@ -106,6 +107,22 @@ function sameDay(a, b) {
   log("sameDay compared", { a: a.toISOString(), b: b.toISOString(), result });
   return result;
 }
+function isDateExcluded(ymd, excludedRanges) {
+  // Проверяет, входит ли дата в один из исключаемых диапазонов
+  log("isDateExcluded checking", { ymd, excludedRanges });
+  if (!Array.isArray(excludedRanges) || excludedRanges.length === 0) {
+    log("No excluded ranges configured");
+    return false;
+  }
+  for (const range of excludedRanges) {
+    if (ymd >= range.from && ymd <= range.to) {
+      log("Date is excluded", { ymd, range });
+      return true;
+    }
+  }
+  log("Date is not excluded", { ymd });
+  return false;
+}
 
 function checkTable(table, cfg) {
   log("checkTable invoked", { cfg });
@@ -149,6 +166,11 @@ function checkTable(table, cfg) {
     }
     if (!isWeekday(d)) {
       log("Skipping non-weekday", { ymd });
+      return;
+    }
+    // Проверяем, не входит ли дата в исключаемые диапазоны
+    if (isDateExcluded(ymd, cfg.excludedDateRanges)) {
+      log("Skipping excluded date", { ymd });
       return;
     }
 

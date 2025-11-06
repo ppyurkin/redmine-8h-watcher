@@ -7,7 +7,8 @@ const DEFAULTS = {
   workEnd: "18:00",
   lunchStart: "13:00",
   lunchDurationMinutes: 60,
-  workingDays: [1, 2, 3, 4, 5]
+  workingDays: [1, 2, 3, 4, 5],
+  excludedDateRanges: []
 };
 
 // Кэшируем ссылки на элементы формы настроек
@@ -20,9 +21,16 @@ const els = {
   lunchStart: document.getElementById("lunchStart"),
   lunchDurationMinutes: document.getElementById("lunchDurationMinutes"),
   workingDays: Array.from(document.querySelectorAll("input[name='workingDays']")),
+  excludedRangesList: document.getElementById("excludedRangesList"),
+  excludeFrom: document.getElementById("excludeFrom"),
+  excludeTo: document.getElementById("excludeTo"),
+  addExcludedRange: document.getElementById("addExcludedRange"),
   save: document.getElementById("save"),
   reset: document.getElementById("reset")
 };
+
+// Массив исключаемых диапазонов дат
+let excludedDateRanges = [];
 
 async function load() {
   // Загружаем сохранённые настройки и отображаем их в форме
@@ -40,6 +48,41 @@ async function load() {
   els.workingDays.forEach(cb => {
     cb.checked = selectedDays.includes(Number(cb.value));
   });
+  // Загружаем исключаемые диапазоны дат
+  excludedDateRanges = Array.isArray(cfg.excludedDateRanges) ? cfg.excludedDateRanges : [];
+  renderExcludedRanges();
+}
+
+function renderExcludedRanges() {
+  // Отображаем список исключаемых диапазонов
+  els.excludedRangesList.innerHTML = "";
+  if (excludedDateRanges.length === 0) {
+    els.excludedRangesList.innerHTML = "<p><small>Нет исключаемых дат</small></p>";
+    return;
+  }
+  excludedDateRanges.forEach((range, index) => {
+    const div = document.createElement("div");
+    div.className = "excluded-range";
+    const text = range.from === range.to
+      ? `${formatDate(range.from)}`
+      : `${formatDate(range.from)} — ${formatDate(range.to)}`;
+    div.innerHTML = `
+      <span>${text}</span>
+      <button data-index="${index}">Удалить</button>
+    `;
+    div.querySelector("button").addEventListener("click", (e) => {
+      const idx = Number(e.target.dataset.index);
+      excludedDateRanges.splice(idx, 1);
+      renderExcludedRanges();
+    });
+    els.excludedRangesList.appendChild(div);
+  });
+}
+
+function formatDate(dateStr) {
+  // Форматирует дату из YYYY-MM-DD в DD.MM.YYYY
+  const [y, m, d] = dateStr.split("-");
+  return `${d}.${m}.${y}`;
 }
 async function save() {
   // Собираем выбранные пользователем дни недели
@@ -57,7 +100,8 @@ async function save() {
     workEnd: sanitizeTime(els.workEnd.value, DEFAULTS.workEnd),
     lunchStart: sanitizeTime(els.lunchStart.value, DEFAULTS.lunchStart),
     lunchDurationMinutes: Number(els.lunchDurationMinutes.value) || 0,
-    workingDays: workingDays.length ? workingDays : DEFAULTS.workingDays
+    workingDays: workingDays.length ? workingDays : DEFAULTS.workingDays,
+    excludedDateRanges: excludedDateRanges
   });
   // Пересоздаём алармы
   chrome.runtime.getBackgroundPage
@@ -66,6 +110,35 @@ async function save() {
   // Так как сервис-воркер, просто перезапустим логику:
   chrome.runtime.reload();
 }
+
+// Обработчик для добавления нового диапазона исключаемых дат
+els.addExcludedRange.addEventListener("click", () => {
+  const from = els.excludeFrom.value;
+  const to = els.excludeTo.value || from;
+
+  if (!from) {
+    alert("Укажите дату начала");
+    return;
+  }
+
+  // Проверяем, что дата окончания не раньше даты начала
+  if (to < from) {
+    alert("Дата окончания не может быть раньше даты начала");
+    return;
+  }
+
+  // Добавляем диапазон в массив
+  excludedDateRanges.push({ from, to });
+  // Сортируем по дате начала
+  excludedDateRanges.sort((a, b) => a.from.localeCompare(b.from));
+
+  // Очищаем поля ввода
+  els.excludeFrom.value = "";
+  els.excludeTo.value = "";
+
+  // Перерисовываем список
+  renderExcludedRanges();
+});
 
 // Обработчики кнопок «Сохранить» и «Сбросить»
 els.save.addEventListener("click", save);

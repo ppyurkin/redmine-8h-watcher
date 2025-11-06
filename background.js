@@ -16,7 +16,8 @@ const DEFAULT_SETTINGS = {
   workEnd: "18:00",
   lunchStart: "13:00",
   lunchDurationMinutes: 60,
-  workingDays: [1, 2, 3, 4, 5]
+  workingDays: [1, 2, 3, 4, 5],
+  excludedDateRanges: []
 };
 
 // При установке и запуске расширения пересоздаём расписание проверок
