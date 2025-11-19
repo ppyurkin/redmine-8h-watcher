@@ -10,14 +10,12 @@
 
 ## Установка
 1. Скачайте или клонируйте репозиторий. Например, выполните:
-
-```
-git clone https://github.com/ppyurkin/redmine-8h-watcher.git
-```
-
-либо скачайте ZIP-архив по кнопке **Code → Download ZIP** (https://github.com/ppyurkin/redmine-8h-watcher/archive/refs/heads/master.zip) и распакуйте его в удобную папку.
-2. В Chrome откройте `chrome://extensions/` и включите режим разработчика.
-3. Нажмите «Загрузить распакованное расширение» и выберите папку проекта.
+    ```
+    git clone https://github.com/ppyurkin/redmine-8h-watcher.git
+    ```
+    либо скачайте ZIP-архив по кнопке **Code → [Download ZIP](https://github.com/ppyurkin/redmine-8h-watcher/archive/refs/heads/master.zip)** и распакуйте его в удобную папку.
+1. В Chrome откройте `chrome://extensions/` и включите режим разработчика.
+1. Нажмите «Загрузить распакованное расширение» и выберите папку проекта.
 
 ## Настройка
 Откройте страницу настроек расширения (Options) и отредактируйте параметры под свой график:
@@ -32,4 +30,4 @@ git clone https://github.com/ppyurkin/redmine-8h-watcher.git
 Нажмите на иконку расширения в панели браузера, чтобы запустить проверку вне расписания. Отчёт откроется во вкладке фона, а результат отобразится в уведомлении и на бэйдже.
 
 ## Лицензия
-Проект распространяется под лицензией MIT. См. файл [LICENSE](LICENSE), если он присутствует в сборке.
+Проект распространяется под лицензией MIT
