@@ -2,15 +2,17 @@ importScripts("shared.js");
 
 const {
   DEFAULT_SETTINGS,
-  sanitizeReportUrl,
+  normalizeSettings,
   isDateExcluded,
   formatHours
 } = RM8H_SHARED;
 
+const NOTIFICATION_DEDUPE_KEY = "rm8h:lastNotification";
+const NOTIFICATION_DEDUPE_TTL_MS = 120 * 60 * 1000;
+
 // Универсальная функция логирования с единым префиксом
 function log(...args) {
-  if (!globalDebugEnabled) return;
-  console.log("[RM8H][background]", ...args);
+  globalDebugEnabled && console.log("[RM8H][background]", ...args);
 }
 
 let globalDebugEnabled = DEFAULT_SETTINGS.debug;
@@ -45,8 +47,15 @@ chrome.alarms.onAlarm.addListener(alarm => {
   triggerCheck("scheduled");
 });
 
-function notify(title, message) {
+async function notify(title, message) {
   log("Creating notification", { title, message });
+  const payload = `${title}\n${message || ""}`;
+  const shouldNotify = await shouldSendNotification(payload);
+  if (!shouldNotify) {
+    log("Notification skipped by dedupe", { title, message });
+    return;
+  }
+
   // Создаём системное уведомление с заданными параметрами
   chrome.notifications.create({
     type: "basic",
@@ -57,6 +66,24 @@ function notify(title, message) {
   });
 }
 
+async function shouldSendNotification(payload) {
+  try {
+    const now = Date.now();
+    const state = await chrome.storage.session.get(NOTIFICATION_DEDUPE_KEY);
+    const last = state[NOTIFICATION_DEDUPE_KEY];
+    if (last && last.payload === payload && Number.isFinite(last.ts) && now - last.ts < NOTIFICATION_DEDUPE_TTL_MS) {
+      return false;
+    }
+
+    await chrome.storage.session.set({
+      [NOTIFICATION_DEDUPE_KEY]: { payload, ts: now }
+    });
+    return true;
+  } catch (error) {
+    log("Notification dedupe unavailable, proceeding", error);
+    return true;
+  }
+}
 async function initSchedules() {
   log("Initializing schedules");
   // Получаем актуальные настройки пользователя
@@ -122,7 +149,7 @@ async function triggerCheck(source) {
     }
   }
 
-  const reportUrl = sanitizeReportUrl(settings.reportUrl);
+  const reportUrl = settings.reportUrl;
   log("Checking report availability", reportUrl);
   const availability = await checkReportAvailability(reportUrl);
   log("Report availability result", availability);
@@ -130,7 +157,7 @@ async function triggerCheck(source) {
   if (!availability.ok) {
     const message = availability.message || "Redmine недоступен";
     log("Report unavailable – applying default day state", message);
-    await applyDefaultDayState({
+    await handleSyntheticResult({
       errorMessage: message,
       errorTitle: "Не удалось открыть отчёт",
       checkedAt: new Date(),
@@ -213,7 +240,7 @@ async function handleResultMessage(payload, sender) {
     // Если контент-скрипт сообщил об ошибке, показываем уведомление
     const errorTitle = payload.errorTitle || "Не удалось проверить отчёт";
     log("Sending error notification", { message: payload.error, title: errorTitle });
-    notify(errorTitle, payload.error);
+    await notify(errorTitle, payload.error);
   }
 
   const missingDays = !hasError && Array.isArray(payload.missingDays) ? payload.missingDays : [];
@@ -224,7 +251,7 @@ async function handleResultMessage(payload, sender) {
       .map(d => `${d.date}: ${formatHours(d.hours)} ч`)
       .join("\n");
     log("Sending missing days notification", lines);
-    notify("Недобор часов по будням", lines);
+    await notify("Недобор часов по будням", lines);
   }
 
   // Определяем дату проверки и ожидаемое количество часов к текущему моменту
@@ -259,8 +286,16 @@ async function handleResultMessage(payload, sender) {
   closeTechnicalTab(sender);
 }
 
-function applyDefaultDayState({ errorMessage, errorTitle, checkedAt = new Date(), url } = {}) {
-  log("Applying default day state", { errorMessage, errorTitle, checkedAt, url });
+/**
+ * Creates a synthetic result payload and forwards it to the main result pipeline.
+ *
+ * Side effects:
+ * - updates badge text/background via handleResultMessage
+ * - may show notifications via handleResultMessage
+ * - may close technical tab via handleResultMessage
+ */
+function handleSyntheticResult({ errorMessage, errorTitle, checkedAt = new Date(), url } = {}) {
+  log("Applying synthetic result", { errorMessage, errorTitle, checkedAt, url });
   const payload = {
     missingDays: [],
     hoursToday: 0,
@@ -277,16 +312,7 @@ async function getSettings() {
   log("Fetching settings from storage");
   // Забираем настройки из синхронизированного хранилища и подмешиваем значения по умолчанию
   const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  const settings = {
-    ...DEFAULT_SETTINGS,
-    ...stored
-  };
-  settings.workingDays = Array.isArray(settings.workingDays) && settings.workingDays.length
-    ? settings.workingDays.map(Number)
-    : DEFAULT_SETTINGS.workingDays;
-  settings.excludedDateRanges = RM8H_SHARED.normalizeExcludedDateRanges(settings.excludedDateRanges);
-  settings.reportUrl = sanitizeReportUrl(settings.reportUrl);
-  settings.debug = Boolean(settings.debug);
+  const settings = normalizeSettings(stored);
   globalDebugEnabled = settings.debug;
   log("Normalized settings", settings);
   return settings;
@@ -315,7 +341,7 @@ function isWithinWorkingWindow(date, settings) {
 
   const lunchStart = parseTime(settings.lunchStart);
   const lunchEnd = lunchStart != null
-    ? lunchStart + (Number(settings.lunchDurationMinutes) || 0)
+    ? lunchStart + settings.lunchDurationMinutes
     : null;
 
   log("Lunch window", { lunchStart, lunchEnd });
@@ -338,7 +364,7 @@ function calculateExpectedHours(date, settings) {
 
   const workIntersection = Math.max(0, Math.min(current, end) - start);
   const lunchStart = parseTime(settings.lunchStart);
-  const lunchDuration = Number(settings.lunchDurationMinutes) || 0;
+  const lunchDuration = settings.lunchDurationMinutes;
   const lunchEnd = lunchStart != null ? lunchStart + lunchDuration : null;
   const lunchIntersection = lunchStart != null && lunchEnd != null
     ? Math.max(0, Math.min(current, lunchEnd, end) - Math.max(start, lunchStart))
@@ -358,7 +384,7 @@ function buildWorkingHourSlots(settings) {
   if (start == null || end == null || end <= start) return [];
 
   const lunchStart = parseTime(settings.lunchStart);
-  const lunchDuration = Number(settings.lunchDurationMinutes) || 0;
+  const lunchDuration = settings.lunchDurationMinutes;
   const lunchEnd = lunchStart != null ? lunchStart + lunchDuration : null;
 
   log("Lunch configuration", { lunchStart, lunchEnd, lunchDuration });
@@ -444,4 +470,3 @@ function closeTechnicalTab(sender) {
     }
   });
 }
-

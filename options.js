@@ -1,4 +1,4 @@
-const { DEFAULT_SETTINGS, sanitizeReportUrl, normalizeExcludedDateRanges } = RM8H_SHARED;
+const { DEFAULT_SETTINGS, normalizeExcludedDateRanges, normalizeSettings } = RM8H_SHARED;
 
 let excludedDateRanges = [];
 
@@ -22,27 +22,19 @@ const els = {
 
 async function load() {
   const cfg = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  const normalized = {
-    ...DEFAULT_SETTINGS,
-    ...cfg,
-    reportUrl: sanitizeReportUrl(cfg.reportUrl),
-    excludedDateRanges: normalizeExcludedDateRanges(cfg.excludedDateRanges)
-  };
+  const normalized = normalizeSettings(cfg);
 
   els.reportUrl.value = normalized.reportUrl;
   els.minHoursPerDay.value = normalized.minHoursPerDay;
   els.highlight.checked = normalized.highlight;
-  els.debug.checked = Boolean(normalized.debug);
+  els.debug.checked = normalized.debug;
   els.workStart.value = normalized.workStart;
   els.workEnd.value = normalized.workEnd;
   els.lunchStart.value = normalized.lunchStart;
   els.lunchDurationMinutes.value = normalized.lunchDurationMinutes;
 
-  const selectedDays = Array.isArray(normalized.workingDays) && normalized.workingDays.length
-    ? normalized.workingDays.map(Number)
-    : DEFAULT_SETTINGS.workingDays;
   els.workingDays.forEach(cb => {
-    cb.checked = selectedDays.includes(Number(cb.value));
+    cb.checked = normalized.workingDays.includes(Number(cb.value));
   });
 
   excludedDateRanges = normalized.excludedDateRanges;
@@ -50,28 +42,40 @@ async function load() {
 }
 
 function renderExcludedRanges() {
-  els.excludedRangesList.innerHTML = "";
+  els.excludedRangesList.replaceChildren();
   if (excludedDateRanges.length === 0) {
-    els.excludedRangesList.innerHTML = "<p><small>Нет исключаемых дат</small></p>";
+    const p = document.createElement("p");
+    const small = document.createElement("small");
+    small.textContent = "Нет исключаемых дат";
+    p.appendChild(small);
+    els.excludedRangesList.appendChild(p);
     return;
   }
 
   excludedDateRanges.forEach((range, index) => {
     const div = document.createElement("div");
     div.className = "excluded-range";
+
     const text = range.from === range.to
       ? `${formatDate(range.from)}`
       : `${formatDate(range.from)} — ${formatDate(range.to)}`;
-    div.innerHTML = `
-      <span>${text}</span>
-      <button data-index="${index}">Удалить</button>
-    `;
-    div.querySelector("button").addEventListener("click", e => {
-      const idx = Number(e.target.dataset.index);
+
+    const span = document.createElement("span");
+    span.textContent = text;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.index = String(index);
+    button.textContent = "Удалить";
+
+    button.addEventListener("click", e => {
+      const idx = Number(e.currentTarget.dataset.index);
       excludedDateRanges.splice(idx, 1);
       excludedDateRanges = normalizeExcludedDateRanges(excludedDateRanges);
       renderExcludedRanges();
     });
+
+    div.append(span, button);
     els.excludedRangesList.appendChild(div);
   });
 }
@@ -81,26 +85,24 @@ function formatDate(dateStr) {
   return `${d}.${m}.${y}`;
 }
 
-function sanitizeTime(value, fallback) {
-  return value && /^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(value) ? value : fallback;
-}
-
 async function save() {
   const workingDays = els.workingDays.filter(cb => cb.checked).map(cb => Number(cb.value));
   excludedDateRanges = normalizeExcludedDateRanges(excludedDateRanges);
 
-  await chrome.storage.sync.set({
-    reportUrl: sanitizeReportUrl(els.reportUrl.value.trim()),
-    minHoursPerDay: Number(els.minHoursPerDay.value),
+  const normalized = normalizeSettings({
+    reportUrl: els.reportUrl.value.trim(),
+    minHoursPerDay: els.minHoursPerDay.value,
     highlight: !!els.highlight.checked,
     debug: !!els.debug.checked,
-    workStart: sanitizeTime(els.workStart.value, DEFAULT_SETTINGS.workStart),
-    workEnd: sanitizeTime(els.workEnd.value, DEFAULT_SETTINGS.workEnd),
-    lunchStart: sanitizeTime(els.lunchStart.value, DEFAULT_SETTINGS.lunchStart),
-    lunchDurationMinutes: Number(els.lunchDurationMinutes.value) || 0,
-    workingDays: workingDays.length ? workingDays : DEFAULT_SETTINGS.workingDays,
+    workStart: els.workStart.value,
+    workEnd: els.workEnd.value,
+    lunchStart: els.lunchStart.value,
+    lunchDurationMinutes: els.lunchDurationMinutes.value,
+    workingDays,
     excludedDateRanges
   });
+
+  await chrome.storage.sync.set(normalized);
 
   chrome.runtime.reload();
 }

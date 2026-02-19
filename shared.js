@@ -74,6 +74,66 @@
     }
   }
 
+  function normalizeMinHours(value, fallback = DEFAULT_SETTINGS.minHoursPerDay) {
+    if (value == null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 && n <= 24 ? n : fallback;
+  }
+
+  function normalizeLunchDurationMinutes(value, fallback = DEFAULT_SETTINGS.lunchDurationMinutes) {
+    if (value == null) return fallback;
+    if (typeof value === "string" && value.trim() === "") return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 && n <= 1440 ? n : fallback;
+  }
+
+  function isValidTime(value) {
+    return typeof value === "string" && /^([0-1]?\d|2[0-3]):([0-5]\d)$/.test(value.trim());
+  }
+
+  function normalizeTime(value, fallback) {
+    return isValidTime(value) ? value.trim() : fallback;
+  }
+
+
+
+  function normalizeBoolean(value, fallback) {
+    return typeof value === "boolean" ? value : fallback;
+  }
+
+  function normalizeWorkingDays(value, fallback = DEFAULT_SETTINGS.workingDays) {
+    if (!Array.isArray(value)) return [...fallback];
+
+    const normalized = Array.from(
+      new Set(
+        value
+          .map(Number)
+          .filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+      )
+    );
+
+    return normalized.length ? normalized : [...fallback];
+  }
+
+  function normalizeSettings(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    return {
+      ...DEFAULT_SETTINGS,
+      ...source,
+      reportUrl: sanitizeReportUrl(source.reportUrl),
+      minHoursPerDay: normalizeMinHours(source.minHoursPerDay),
+      highlight: normalizeBoolean(source.highlight, DEFAULT_SETTINGS.highlight),
+      debug: normalizeBoolean(source.debug, DEFAULT_SETTINGS.debug),
+      workStart: normalizeTime(source.workStart, DEFAULT_SETTINGS.workStart),
+      workEnd: normalizeTime(source.workEnd, DEFAULT_SETTINGS.workEnd),
+      lunchStart: normalizeTime(source.lunchStart, DEFAULT_SETTINGS.lunchStart),
+      lunchDurationMinutes: normalizeLunchDurationMinutes(source.lunchDurationMinutes),
+      workingDays: normalizeWorkingDays(source.workingDays),
+      excludedDateRanges: normalizeExcludedDateRanges(source.excludedDateRanges)
+    };
+  }
+
   function formatHours(value) {
     if (!Number.isFinite(value)) return "0";
     if (Number.isInteger(value)) return String(value);
@@ -86,6 +146,9 @@
     normalizeExcludedDateRanges,
     isDateExcluded,
     sanitizeReportUrl,
+    normalizeMinHours,
+    normalizeLunchDurationMinutes,
+    normalizeSettings,
     formatHours
   };
 })(globalThis);

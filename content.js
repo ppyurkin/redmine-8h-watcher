@@ -1,4 +1,4 @@
-const { DEFAULT_SETTINGS, isDateExcluded } = RM8H_SHARED;
+const { DEFAULT_SETTINGS, isDateExcluded, normalizeSettings } = RM8H_SHARED;
 
 let debugEnabled = DEFAULT_SETTINGS.debug;
 
@@ -8,12 +8,8 @@ function log(...args) {
 }
 
 (async function main() {
-  const cfg = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  cfg.excludedDateRanges = RM8H_SHARED.normalizeExcludedDateRanges(cfg.excludedDateRanges);
-  cfg.workingDays = Array.isArray(cfg.workingDays) && cfg.workingDays.length
-    ? cfg.workingDays.map(Number)
-    : DEFAULT_SETTINGS.workingDays;
-  cfg.debug = Boolean(cfg.debug);
+  const raw = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const cfg = normalizeSettings(raw);
   debugEnabled = cfg.debug;
 
   log("Content script injected", { url: location.href, injectedAt: new Date().toISOString() });
