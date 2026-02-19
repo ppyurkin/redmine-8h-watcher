@@ -16,9 +16,8 @@
   "content_scripts": [
     {
       "matches": ["https://max.rm.mosreg.ru/time_entries/report*"],
-      "js": ["content.js"],
+      "js": ["shared.js", "content.js"],
       "run_at": "document_idle"
     }
   ]
 }
-
