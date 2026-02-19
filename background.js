@@ -1,24 +1,21 @@
+importScripts("shared.js");
+
+const {
+  DEFAULT_SETTINGS,
+  sanitizeReportUrl,
+  isDateExcluded,
+  formatHours
+} = RM8H_SHARED;
+
 // Универсальная функция логирования с единым префиксом
 function log(...args) {
+  if (!globalDebugEnabled) return;
   console.log("[RM8H][background]", ...args);
 }
 
-log("Background script initialized");
+let globalDebugEnabled = DEFAULT_SETTINGS.debug;
 
-// Базовый URL готового отчёта в Redmine, который открываем при проверке
-const DEFAULT_REPORT_URL =
-  "https://max.rm.mosreg.ru/time_entries/report?utf8=%E2%9C%93&criteria%5B%5D=user&columns=day&criteria%5B%5D=&set_filter=1&type=TimeEntryQuery&f%5B%5D=spent_on&op%5Bspent_on%5D=%3E%3Ct-&v%5Bspent_on%5D%5B%5D=14&f%5B%5D=user_id&op%5Buser_id%5D=%3D&v%5Buser_id%5D%5B%5D=me&query%5Bsort_criteria%5D%5B0%5D%5B%5D=spent_on&query%5Bsort_criteria%5D%5B0%5D%5B%5D=desc&query%5Bgroup_by%5D=spent_on&t%5B%5D=hours&c%5B%5D=project&c%5B%5D=spent_on&c%5B%5D=user&c%5B%5D=activity&c%5B%5D=issue&c%5B%5D=comments&c%5B%5D=hours&saved_query_id=0";
-
-// Значения по умолчанию для всех настроек расширения
-const DEFAULT_SETTINGS = {
-  reportUrl: DEFAULT_REPORT_URL,
-  workStart: "09:00",
-  workEnd: "18:00",
-  lunchStart: "13:00",
-  lunchDurationMinutes: 60,
-  workingDays: [1, 2, 3, 4, 5],
-  excludedDateRanges: []
-};
+console.log("[RM8H][background] Background script initialized");
 
 // При установке и запуске расширения пересоздаём расписание проверок
 chrome.runtime.onInstalled.addListener(() => {
@@ -109,10 +106,11 @@ async function triggerCheck(source) {
 
   if (source !== "manual") {
     // Для автоматических запусков проверяем, что сегодня рабочий день
-    const workingDay = isWorkingDay(now, settings.workingDays);
-    log("Is working day?", workingDay);
+    const todayYmd = toYMD(now);
+    const workingDay = isWorkingDay(now, settings.workingDays) && !isDateExcluded(todayYmd, settings.excludedDateRanges);
+    log("Is working day?", { workingDay, todayYmd });
     if (!workingDay) {
-      log("Aborting scheduled check: not a working day");
+      log("Aborting scheduled check: not a working day or excluded date");
       return;
     }
     // ...и что сейчас рабочее время (не обед и не вне смены)
@@ -124,7 +122,7 @@ async function triggerCheck(source) {
     }
   }
 
-  const reportUrl = settings.reportUrl || DEFAULT_REPORT_URL;
+  const reportUrl = sanitizeReportUrl(settings.reportUrl);
   log("Checking report availability", reportUrl);
   const availability = await checkReportAvailability(reportUrl);
   log("Report availability result", availability);
@@ -223,7 +221,7 @@ async function handleResultMessage(payload, sender) {
   if (missingDays.length > 0) {
     // Если есть дни с недобором часов, выводим список в уведомлении
     const lines = missingDays
-      .map(d => `${d.date}: ${d.hours.toFixed(2)} ч`)
+      .map(d => `${d.date}: ${formatHours(d.hours)} ч`)
       .join("\n");
     log("Sending missing days notification", lines);
     notify("Недобор часов по будням", lines);
@@ -232,8 +230,9 @@ async function handleResultMessage(payload, sender) {
   // Определяем дату проверки и ожидаемое количество часов к текущему моменту
   const checkedAt = payload.checkedAt ? new Date(payload.checkedAt) : new Date();
   log("Checked at", checkedAt.toISOString());
-  const isWorkDay = isWorkingDay(checkedAt, settings.workingDays);
-  log("Is checked day working day?", isWorkDay);
+  const checkedYmd = toYMD(checkedAt);
+  const isWorkDay = isWorkingDay(checkedAt, settings.workingDays) && !isDateExcluded(checkedYmd, settings.excludedDateRanges);
+  log("Is checked day working day?", { isWorkDay, checkedYmd });
   const expectedHours = isWorkDay ? calculateExpectedHours(checkedAt, settings) : 0;
   log("Expected hours for day", expectedHours);
   // Фактически заполненное количество часов за сегодня
@@ -242,14 +241,14 @@ async function handleResultMessage(payload, sender) {
     : 0;
   log("Logged hours for today", loggedHours);
   const deficit = Math.max(0, expectedHours - loggedHours);
-  const badgeValue = Math.max(0, Math.ceil(deficit - 1e-9));
-  log("Calculated deficit and badge value", { deficit, badgeValue });
+  const badgeText = deficit > 0 ? formatHours(deficit) : "";
+  log("Calculated deficit and badge value", { deficit, badgeText });
 
-  if (badgeValue > 0) {
+  if (badgeText) {
     // Если есть недобор, подсвечиваем и ставим значение на бейдже иконки
-    log("Setting badge for deficit", badgeValue);
+    log("Setting badge for deficit", badgeText);
     chrome.action.setBadgeBackgroundColor({ color: "#d00" });
-    chrome.action.setBadgeText({ text: String(badgeValue) });
+    chrome.action.setBadgeText({ text: badgeText });
   } else {
     // В противном случае очищаем бейдж
     log("Clearing badge – no deficit");
@@ -278,16 +277,19 @@ async function getSettings() {
   log("Fetching settings from storage");
   // Забираем настройки из синхронизированного хранилища и подмешиваем значения по умолчанию
   const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-  log("Raw stored settings", stored);
-  const workingDays = Array.isArray(stored.workingDays) && stored.workingDays.length
-    ? stored.workingDays.map(Number)
-    : DEFAULT_SETTINGS.workingDays;
-  log("Normalized working days", workingDays);
-  return {
+  const settings = {
     ...DEFAULT_SETTINGS,
-    ...stored,
-    workingDays
+    ...stored
   };
+  settings.workingDays = Array.isArray(settings.workingDays) && settings.workingDays.length
+    ? settings.workingDays.map(Number)
+    : DEFAULT_SETTINGS.workingDays;
+  settings.excludedDateRanges = RM8H_SHARED.normalizeExcludedDateRanges(settings.excludedDateRanges);
+  settings.reportUrl = sanitizeReportUrl(settings.reportUrl);
+  settings.debug = Boolean(settings.debug);
+  globalDebugEnabled = settings.debug;
+  log("Normalized settings", settings);
+  return settings;
 }
 
 function isWorkingDay(date, workingDays) {
@@ -329,15 +331,22 @@ function isWithinWorkingWindow(date, settings) {
 
 function calculateExpectedHours(date, settings) {
   log("Calculating expected hours", { date: date.toISOString(), settings });
-  // Подсчитываем, сколько часовых слотов уже завершилось к текущему времени
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  log("Minutes for expected hours", minutes);
-  const slots = buildWorkingHourSlots(settings);
-  log("Slots for expected hours", slots);
-  if (!slots.length) return 0;
-  const completed = slots.filter(min => minutes >= min).length;
-  log("Completed slots count", completed);
-  return Math.min(completed, slots.length);
+  const current = date.getHours() * 60 + date.getMinutes();
+  const start = parseTime(settings.workStart);
+  const end = parseTime(settings.workEnd);
+  if (start == null || end == null || end <= start || current <= start) return 0;
+
+  const workIntersection = Math.max(0, Math.min(current, end) - start);
+  const lunchStart = parseTime(settings.lunchStart);
+  const lunchDuration = Number(settings.lunchDurationMinutes) || 0;
+  const lunchEnd = lunchStart != null ? lunchStart + lunchDuration : null;
+  const lunchIntersection = lunchStart != null && lunchEnd != null
+    ? Math.max(0, Math.min(current, lunchEnd, end) - Math.max(start, lunchStart))
+    : 0;
+
+  const expected = Math.max(0, (workIntersection - lunchIntersection) / 60);
+  log("Expected hours details", { current, workIntersection, lunchIntersection, expected });
+  return expected;
 }
 
 function buildWorkingHourSlots(settings) {
@@ -405,13 +414,20 @@ function minutesToTime(min) {
   return `${hh}:${mm}`;
 }
 
+function toYMD(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function closeTechnicalTab(sender) {
   log("Checking whether to close technical tab", sender);
   // Проверяем, что сообщение пришло с вкладки Redmine
   if (!sender?.tab?.id) return;
   const tabUrl = sender.tab.pendingUrl || sender.tab.url || "";
   log("Sender tab URL", tabUrl);
-  if (!tabUrl.startsWith("https://max.rm.mosreg.ru")) return;
+  if (!tabUrl.startsWith(RM8H_SHARED.REPORT_ORIGIN)) return;
 
   // Если вкладка неактивна, закрываем её, чтобы не мешать пользователю
   chrome.tabs.get(sender.tab.id, t => {
