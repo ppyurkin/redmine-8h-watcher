@@ -136,8 +136,10 @@
 
   function formatHours(value) {
     if (!Number.isFinite(value)) return "0";
-    if (Number.isInteger(value)) return String(value);
-    return String(value);
+    const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+    const normalized = Object.is(rounded, -0) ? 0 : rounded;
+    if (Number.isInteger(normalized)) return String(normalized);
+    return normalized.toFixed(2).replace(/\.?0+$/, "");
   }
 
   global.RM8H_SHARED = {
