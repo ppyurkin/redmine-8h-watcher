@@ -13,6 +13,7 @@
     workEnd: "18:00",
     lunchStart: "13:00",
     lunchDurationMinutes: 60,
+    includeCurrentHourRemainder: false,
     workingDays: [1, 2, 3, 4, 5],
     excludedDateRanges: []
   };
@@ -129,6 +130,10 @@
       workEnd: normalizeTime(source.workEnd, DEFAULT_SETTINGS.workEnd),
       lunchStart: normalizeTime(source.lunchStart, DEFAULT_SETTINGS.lunchStart),
       lunchDurationMinutes: normalizeLunchDurationMinutes(source.lunchDurationMinutes),
+      includeCurrentHourRemainder: normalizeBoolean(
+        source.includeCurrentHourRemainder,
+        DEFAULT_SETTINGS.includeCurrentHourRemainder
+      ),
       workingDays: normalizeWorkingDays(source.workingDays),
       excludedDateRanges: normalizeExcludedDateRanges(source.excludedDateRanges)
     };

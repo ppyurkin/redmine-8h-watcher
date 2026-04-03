@@ -362,24 +362,27 @@ function calculateExpectedHours(date, settings) {
   const end = parseTime(settings.workEnd);
   if (start == null || end == null || end <= start || current <= start) return 0;
 
-  // Текущий незавершённый час не учитываем в ожидаемом значении.
+  const includeCurrentHourRemainder = Boolean(settings.includeCurrentHourRemainder);
   const cappedCurrent = Math.min(current, end);
-  const completedHourBoundary = Math.floor(cappedCurrent / 60) * 60;
-  if (completedHourBoundary <= start) return 0;
+  const calculationBoundary = includeCurrentHourRemainder
+    ? cappedCurrent
+    : Math.floor(cappedCurrent / 60) * 60;
+  if (calculationBoundary <= start) return 0;
 
-  const workIntersection = Math.max(0, completedHourBoundary - start);
+  const workIntersection = Math.max(0, calculationBoundary - start);
   const lunchStart = parseTime(settings.lunchStart);
   const lunchDuration = settings.lunchDurationMinutes;
   const lunchEnd = lunchStart != null ? lunchStart + lunchDuration : null;
   const lunchIntersection = lunchStart != null && lunchEnd != null
-    ? Math.max(0, Math.min(completedHourBoundary, lunchEnd, end) - Math.max(start, lunchStart))
+    ? Math.max(0, Math.min(calculationBoundary, lunchEnd, end) - Math.max(start, lunchStart))
     : 0;
 
   const expected = Math.max(0, (workIntersection - lunchIntersection) / 60);
   log("Expected hours details", {
     current,
     cappedCurrent,
-    completedHourBoundary,
+    includeCurrentHourRemainder,
+    calculationBoundary,
     workIntersection,
     lunchIntersection,
     expected
