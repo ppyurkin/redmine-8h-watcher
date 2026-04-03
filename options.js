@@ -11,6 +11,7 @@ const els = {
   workEnd: document.getElementById("workEnd"),
   lunchStart: document.getElementById("lunchStart"),
   lunchDurationMinutes: document.getElementById("lunchDurationMinutes"),
+  includeCurrentHourRemainder: document.getElementById("includeCurrentHourRemainder"),
   workingDays: Array.from(document.querySelectorAll("input[name='workingDays']")),
   excludedRangesList: document.getElementById("excludedRangesList"),
   excludeFrom: document.getElementById("excludeFrom"),
@@ -32,6 +33,7 @@ async function load() {
   els.workEnd.value = normalized.workEnd;
   els.lunchStart.value = normalized.lunchStart;
   els.lunchDurationMinutes.value = normalized.lunchDurationMinutes;
+  els.includeCurrentHourRemainder.checked = normalized.includeCurrentHourRemainder;
 
   els.workingDays.forEach(cb => {
     cb.checked = normalized.workingDays.includes(Number(cb.value));
@@ -98,6 +100,7 @@ async function save() {
     workEnd: els.workEnd.value,
     lunchStart: els.lunchStart.value,
     lunchDurationMinutes: els.lunchDurationMinutes.value,
+    includeCurrentHourRemainder: !!els.includeCurrentHourRemainder.checked,
     workingDays,
     excludedDateRanges
   });
