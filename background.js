@@ -360,12 +360,14 @@ function calculateExpectedHours(date, settings) {
   const current = date.getHours() * 60 + date.getMinutes();
   const start = parseTime(settings.workStart);
   const end = parseTime(settings.workEnd);
-  if (start == null || end == null || end <= start || current <= start) return 0;
+  if (start == null || end == null || end <= start || current < start) return 0;
 
   const includeCurrentHourRemainder = Boolean(settings.includeCurrentHourRemainder);
   const cappedCurrent = Math.min(current, end);
   const calculationBoundary = includeCurrentHourRemainder
-    ? cappedCurrent
+    // При включённой опции незавершённый рабочий час учитываем целиком
+    ? Math.min(end, Math.floor(cappedCurrent / 60) * 60 + 60)
+    // Иначе учитываем только полностью завершённые часы
     : Math.floor(cappedCurrent / 60) * 60;
   if (calculationBoundary <= start) return 0;
 
