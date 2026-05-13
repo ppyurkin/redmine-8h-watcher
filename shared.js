@@ -14,6 +14,7 @@
     lunchStart: "13:00",
     lunchDurationMinutes: 60,
     includeCurrentHourRemainder: false,
+    showSurplusBadge: true,
     workingDays: [1, 2, 3, 4, 5],
     excludedDateRanges: []
   };
@@ -134,6 +135,7 @@
         source.includeCurrentHourRemainder,
         DEFAULT_SETTINGS.includeCurrentHourRemainder
       ),
+      showSurplusBadge: normalizeBoolean(source.showSurplusBadge, DEFAULT_SETTINGS.showSurplusBadge),
       workingDays: normalizeWorkingDays(source.workingDays),
       excludedDateRanges: normalizeExcludedDateRanges(source.excludedDateRanges)
     };

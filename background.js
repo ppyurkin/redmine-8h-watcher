@@ -267,18 +267,18 @@ async function handleResultMessage(payload, sender) {
     ? payload.hoursToday
     : 0;
   log("Logged hours for today", loggedHours);
-  const deficit = Math.max(0, expectedHours - loggedHours);
-  const badgeText = deficit > 0 ? formatHours(deficit) : "";
-  log("Calculated deficit and badge value", { deficit, badgeText });
+  const hoursDelta = roundHours(expectedHours - loggedHours);
+  const badgeState = getBadgeState(hoursDelta, settings);
+  log("Calculated hours delta and badge value", { hoursDelta, badgeState });
 
-  if (badgeText) {
-    // Если есть недобор, подсвечиваем и ставим значение на бейдже иконки
-    log("Setting badge for deficit", badgeText);
-    chrome.action.setBadgeBackgroundColor({ color: "#d00" });
-    chrome.action.setBadgeText({ text: badgeText });
+  if (badgeState) {
+    // Если есть недобор или запас часов, подсвечиваем и ставим значение на бейдже иконки
+    log("Setting badge", badgeState);
+    chrome.action.setBadgeBackgroundColor({ color: badgeState.color });
+    chrome.action.setBadgeText({ text: badgeState.text });
   } else {
     // В противном случае очищаем бейдж
-    log("Clearing badge – no deficit");
+    log("Clearing badge – no deficit or visible surplus");
     chrome.action.setBadgeText({ text: "" });
   }
 
@@ -306,6 +306,22 @@ function handleSyntheticResult({ errorMessage, errorTitle, checkedAt = new Date(
     url
   };
   return handleResultMessage(payload, null);
+}
+
+function roundHours(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getBadgeState(hoursDelta, settings) {
+  if (hoursDelta > 0) {
+    return { text: formatHours(hoursDelta), color: "#d00" };
+  }
+
+  if (hoursDelta < 0 && settings.showSurplusBadge) {
+    return { text: formatHours(Math.abs(hoursDelta)), color: "#2e7d32" };
+  }
+
+  return null;
 }
 
 async function getSettings() {
